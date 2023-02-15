@@ -10,6 +10,7 @@ data Formula = Exp Assertion
 data Statement = Assume Formula
                | Assert Formula
                | Havoc Var
+               | Parens Block
                deriving (Show)
 
 type Block = [Statement]
