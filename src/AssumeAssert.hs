@@ -1,4 +1,4 @@
-module AssumeAssert (AssumeAssertProgram) where
+module AssumeAssert (Program) where
 
 import Language(Assertion)
 
