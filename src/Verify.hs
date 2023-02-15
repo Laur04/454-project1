@@ -8,14 +8,15 @@ data Result = Verified | NotVerified | Unknown String
 verify :: String -> IO Result
 verify prog = do
   let parsedProgram = parseProg prog
-  print parsedProgram[0]
-  let assumeAssertProgram = convertToAssumeAssert parsedProgram[1]
+
+  let assumeAssertProgram = convertToAssumeAssert parsedProgram[3]
+
   let verificationCondition = computeWeakestPrecondition assumeAssertProgram
 
   return Verified
 
 covertToAssumeAssert :: Language.Program -> Language.Program.Block
-convertToAssumeAssert prog =
+convertToAssumeAssert prog = 
 
 convertHelper :: Language.Program.Statement
 

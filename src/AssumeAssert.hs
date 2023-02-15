@@ -2,12 +2,14 @@ module AssumeAssert (Assume(..), Assert(..), Havoc(..)) where
 
 import Language
 
-type Name = String
-
 type Var = String
 
-data AssumeAssertStatement = Assume BoolExp
-                            | Assert BoolExp
+data Formula = Exp Assertion
+             | Assign Var Formula
+
+
+data AssumeAssertStatement = Assume Formula
+                            | Assert Formula
                             | Havoc Var
                             deriving (Show)
 
