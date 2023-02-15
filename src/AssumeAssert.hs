@@ -1,18 +1,17 @@
-module AssumeAssert (Assume(..), Assert(..), Havoc(..)) where
+module AssumeAssert (AssumeAssertProgram) where
 
-import Language
+import Language(Assertion)
 
 type Var = String
 
 data Formula = Exp Assertion
              | Assign Var Formula
 
+data Statement = Assume Formula
+               | Assert Formula
+               | Havoc Var
+               deriving (Show)
 
-data AssumeAssertStatement = Assume Formula
-                            | Assert Formula
-                            | Havoc Var
-                            deriving (Show)
+type Block = [Statement]
 
-type AssumeAssertBlock = [AssumeAssertStatement]
-
-type AssumeAssertProgram = (Name, AssumeAssertBlock)
+type Program = (Name, Block)

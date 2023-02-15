@@ -1,24 +1,26 @@
 module Verify (Result(..), verify) where
 
+import Language(Program)
+import AssumeAssert(Program)
 import Parser.Parser
 
 data Result = Verified | NotVerified | Unknown String
   deriving (Eq, Show)
 
 verify :: String -> IO Result
-verify prog = do
-  let parsedProgram = parseProg prog
+verify inputProgram = do
+  let parsedProgram = parseProg inputProgram
 
-  let assumeAssertProgram = convertToAssumeAssert parsedProgram[3]
+  let assumeAssertedProgram = convertToAssumeAssert parsedProgram
 
-  let verificationCondition = computeWeakestPrecondition assumeAssertProgram
+  let weakestPreProgram = computeWeakestPrecondition assumeAssertedProgram
+
+  -- TODO: verify with SMT solver
 
   return Verified
 
-covertToAssumeAssert :: Language.Program -> Language.Program.Block
-convertToAssumeAssert prog = 
+covertToAssumeAssert :: Language.Program -> AssumeAssert.Program
+convertToAssumeAssert inputProgram =
 
-convertHelper :: Language.Program.Statement
-
-
-computeWeakestPrecondition :: String -> String
+computeWeakestPrecondition :: AssumeAssert.Program -> ?
+computeWeakestPrecondition inputProgram =
