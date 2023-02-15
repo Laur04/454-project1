@@ -1,0 +1,1 @@
+PROG := "program" test "is" x := 5 "end"
