@@ -15,4 +15,4 @@ data Statement = Assume Formula
 
 type Block = [Statement]
 
-type Program = (Name, Block)
+type Program = Block
