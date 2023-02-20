@@ -65,7 +65,7 @@ import Parser.Lexer
 %%
 
 prog :: { Program }
-    : "program" name pre post "is" block "end" { ($2, $3, $4, $6) }   -- ($2, $4) needs to be changed to what?
+    : "program" name "pre" assn "post" assn "is" block "end" { ($2, [$4], $8, [$6]) }
 
 arithExp :: { ArithExp }
     : int { Num $1 }
@@ -119,16 +119,16 @@ block_rev :: { Block }
     : stmt { [$1] }
     | block_rev stmt { $2:$1 }
 
-pre :: { PreCond }
+pre :: { [Assertion] }
     : assn { [$1] }
 
-post :: { PostCond }
+post :: { [Assertion] }
     : assn { [$1] }
 
 {
 
-parseProg = parse1 . lexProg        -- parseProg is the function that parses, parse1 is created by happy, lexProg is the lexer function
-                                    -- . notation: function composition in Haskell
+parseProg = parse1 . lexProg
+
 parseError :: [Token] -> a
 parseError _ = error "Parse error"
 

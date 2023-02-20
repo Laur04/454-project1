@@ -1,6 +1,5 @@
 {
-module Parser.Lexer ( Token (..)        -- exporting token data type with all its constructors
-                    , lexProg ) where   -- exporting lexProg function (lexes stream of characters --> list of tokens)
+module Parser.Lexer ( Token (..), lexProg ) where
 }
 
 %wrapper "basic"
@@ -63,9 +62,6 @@ data Token = TokenInt Int
            | TProgram
            | TIs
            deriving (Eq, Show)
-
--- haskell has typed classes: take data type such as Token and have it derive an instance of a typed class
--- in the above, Token derives an instance of Eq and Show (equality and printing)
 
 lexProg :: String -> [Token]
 lexProg = alexScanTokens
