@@ -65,7 +65,51 @@ import Parser.Lexer
 %%
 
 prog :: { Program }
-    : "program" name "pre" assn "post" assn "is" block "end" { ($2, [$4], $8, [$6]) }
+    : "program" name "pre" pres "post" posts "is" block "end" { ($2, $4, $8, $6) }
+    | "program" name "post" posts "is" block "end" { ($2, [], $6, $4) }
+    | "program" name "pre" pres "is" block "end" { ($2, $4, $6, []) }
+    | "program" name "is" block "end" { ($2, [], $4, []) }
+
+pres :: { [Assertion] }
+    : pres "pre" assn { $3 : $1 }
+    | assn { [$1] }
+
+posts :: { [Assertion] }
+    : posts "post" assn { $3 : $1 }
+    | assn { [$1] }
+
+assn :: { Assertion }
+    : comp { ACmp $1 } 
+    | '!' assn { ANot $2 }
+    | assn "||" assn { ADisj $1 $3 }
+    | assn "&&" assn { AConj $1 $3 }
+    | assn "==>" assn { Implies $1 $3 }
+    | "forall" names ',' assn { Forall $2 $4 }
+    | "exists" names ',' assn { Exists $2 $4 }  
+    | '(' assn ')' { AParens $2 }
+
+names :: { [Name] }
+    : names name { $2 : $1 }
+    | name { [] }
+
+block :: { Block }
+    : block_rev { reverse $1 }
+
+block_rev :: { Block }
+    : stmt { [$1] }
+    | block_rev stmt { $2:$1 }
+
+stmt :: { Statement }
+    : name ":=" arithExp ';' { Assign $1 $3 }
+    | name ',' name ":=" arithExp ',' arithExp ';' { ParAssign $1 $3 $5 $7 }
+    | name '[' arithExp ']' ":=" arithExp ';' { Write $1 $3 $6 }
+    | "if" boolExp "then" block "else" block "end" { If $2 $4 $6 }
+    | "if" boolExp "then" block "end" { If $2 $4 [] }
+    | "while" boolExp "inv" invs "do" block "end" { While $2 $4 $6 }
+
+invs :: { [Assertion] }
+    : invs "inv" assn { $3 : $1 }
+    | assn { [$1] }
 
 arithExp :: { ArithExp }
     : int { Num $1 }
@@ -87,16 +131,6 @@ comp :: { Comparison }
     | arithExp '<' arithExp { Lt $1 $3 }
     | arithExp '>' arithExp { Gt $1 $3 }
 
-assn :: { Assertion }
-    : comp { ACmp $1 } 
-    | '!' assn { ANot $2 }
-    | assn "||" assn { ADisj $1 $3 }
-    | assn "&&" assn { AConj $1 $3 }
-    | assn "==>" assn { Implies $1 $3 }
-    | "forall" name ',' assn { Forall [$2] $4 }
-    | "exists" name ',' assn { Exists [$2] $4 }  
-    | '(' assn ')' { AParens $2 }
-
 boolExp :: { BoolExp }
     : comp { BCmp $1 }
     | '!' boolExp { BNot $2 }
@@ -104,32 +138,12 @@ boolExp :: { BoolExp }
     | boolExp "&&" boolExp { BConj $1 $3 }
     | '(' boolExp ')' { BParens $2 }
 
-stmt :: { Statement }
-    : name ":=" arithExp ';' { Assign $1 $3 }
-    | name ',' name ":=" arithExp ',' arithExp ';' { ParAssign $1 $3 $5 $7 }
-    | name '[' arithExp ']' ":=" arithExp ';' { Write $1 $3 $6 }
-    | "if" boolExp "then" block "else" block "end" { If $2 $4 $6 }
-    | "if" boolExp "then" block "end" { If $2 $4 [] }
-    | "while" boolExp "inv" assn "do" block "end" { While $2 [$4] $6 }
-
-block :: { Block }
-    : block_rev { reverse $1 }
-
-block_rev :: { Block }
-    : stmt { [$1] }
-    | block_rev stmt { $2:$1 }
-
-pre :: { [Assertion] }
-    : assn { [$1] }
-
-post :: { [Assertion] }
-    : assn { [$1] }
-
 {
 
 parseProg = parse1 . lexProg
 
 parseError :: [Token] -> a
-parseError _ = error "Parse error"
+parseError [] = error "Parse error"
+parseError (x:xs) = error (show (x: xs))
 
 } 
