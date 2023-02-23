@@ -5,7 +5,7 @@ type Name = String
 data ArithExp = Num Int
               | Var Name
               | Read Name ArithExp
-              | Write Name ArithExp ArithExp -- added for AssumeAssert
+              | AWrite Name ArithExp ArithExp -- added for AssumeAssert
               | Add ArithExp ArithExp
               | Sub ArithExp ArithExp
               | Mul ArithExp ArithExp

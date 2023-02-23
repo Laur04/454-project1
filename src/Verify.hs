@@ -20,7 +20,7 @@ verify inputProgram = do
 -- | BEGIN Parser to AssumeAssert Conversion
 
 driverAA :: Language.Program -> AssumeAssert.GCommand
-driverAA ( name, pre, body, post ) = Comb (Comb (assumeInvariants pre) (blockAA body)) (assertInvariants post)
+driverAA ( name, pre, body, post ) = Comb (Comb (assumeInvariants pre) (evalState (blockAA body) 0)) (assertInvariants post)
 
 -- Handle preconditions and invariants
 assumeInvariants :: [Language.Assertion] -> AssumeAssert.GCommand
@@ -33,24 +33,36 @@ assertInvariants (x) = Assert x
 assertInvariants (x : xs) = Comb (Assert x) (assertInvariants xs)
 
 -- Handle program block
-blockAA :: Language.Block -> AssumeAssert.GCommand
-blockAA [] = Assume (ACmp (Eq (Int 0) (Int 0))) -- assume true
-blockAA (x) = toGCommand x
-blockAA (x : xs) = Comb (toGCommand x) (blockAA xs)
+blockAA :: Language.Block -> State Int [AssumeAssert.GCommand]
+blockAA (xs) = do 
+  gcommds <- (mapM (toGCommand) xs)
+  return (foldr (AssumeAssert.Comb) (Assume (ACmp (Eq (Int 0) (Int 0)))) gcommds)
+  -- (Statement -> State Int Command) -> [Statement] -> State Int [Command]
+
+[Statements] -> State Int GCommand
 
 -- Monad for tmp variables
-tmp :: State Int String
-tmp = do n <- get
+tmpGen :: State Int String
+tmpGen = do n <- get
         put (n + 1)
         return "tmp_" ++ (show n)
 
 -- Main converter to Guarded Command
-toGCommand :: Language.Statement -> AssumeAssert.GCommand
-toGCommand ( Assign name arithexp ) = assignHelper name (execState tmp) arithexp
-blockAAHelper ( ParAssign name1 name2 arithexp2 arithexp1 ) = Comb (assignHelper name1 (execState tmp) arithexp1) (assignHelper name2 (execState tmp) arithexp2)
-blockAAHelper ( Write name arithexp_index arithexp_value ) = writeHelper name (execState tmp) arithexp_index arithexp_value
-blockAAHelper ( If boolexp block1 block2 ) = Box (Comb (Assume (convertBoolExp boolexp)) (blockAA block1)) (Comb (Assume (convertBoolExp (BNot boolexp))) (blockAA block2))
-blockAAHelper ( While boolexp assns block ) = Comb (Comb (Comb (assertInvariants assns) (DO HAVOC HERE)) (assumeInvariants assns)) (Box (Comb (Comb (Comb (Assume (convertBoolExp boolexp)) (blockAA block)) (assertInvariants assns)) (Assume (ACmp (Eq (Num 0) (Num 1))))) (Assume (convertBoolExp (BNot boolexp))))
+toGCommand :: Language.Statement -> State Int AssumeAssert.GCommand
+toGCommand (Assign name arithexp) = do 
+  tmp <- tmpGen
+  return (assignHelper name tmp arithexp)
+toGCommand (ParAssign name1 name2 arithexp2 arithexp1) = Comb (assignHelper name1 tmp arithexp1) (assignHelper name2 tmp arithexp2)
+toGCommand (Write name arithexp_index arithexp_value) = writeHelper name tmp arithexp_index arithexp_value
+toGCommand (If boolexp block1 block2) = do
+  blk1 <- (blockAA block1)
+  blk2 <- (blockAA block2)
+  return (Box (Comb (Assume (convertBoolExp boolexp)) (blk1)) (Comb (Assume (convertBoolExp (BNot boolexp))) (blk2)))
+
+toGCommand (While boolexp assns block) = do
+  -- get list of vars
+  -- [ | ] 
+  Comb (Comb (Comb (assertInvariants assns) (DO HAVOC HERE)) (assumeInvariants assns)) (Box (Comb (Comb (Comb (Assume (convertBoolExp boolexp)) (blockAA block)) (assertInvariants assns)) (Assume (ACmp (Eq (Num 0) (Num 1))))) (Assume (convertBoolExp (BNot boolexp))))
 
 -- | Helper functions for Assign, ParAssign
 assignHelper :: String -> String -> Language.ArithExp -> AssumeAssert.GCommand
@@ -69,7 +81,7 @@ replace (x tmp (Parens arithexp)) = Parens (replace x tmp arithexp)
 
 -- | Helper function for Write
 writeHelper :: String -> String -> Language.ArithExp -> Language.ArithExp -> AssumeAssert.GCommand
-writeHelper (x tmp index value) = Comb (Comb (Assume (ACmp (Eq (Var tmp) (Var x)))) (Havoc x)) (Assume (ACmp (Eq (Var x) (Write tmp index value ))))
+writeHelper (x tmp index value) = Comb (Comb (Assume (ACmp (Eq (Var tmp) (Var x)))) (Havoc x)) (Assume (ACmp (Eq (Var x) (AWrite tmp index value ))))
 
 -- | Helper functions for If, While
 convertBoolExp :: Language.BoolExp -> Language.Assertion
