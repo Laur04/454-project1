@@ -5,6 +5,7 @@ type Name = String
 data ArithExp = Num Int
               | Var Name
               | Read Name ArithExp
+              | Write Name ArithExp ArithExp -- added for AssumeAssert
               | Add ArithExp ArithExp
               | Sub ArithExp ArithExp
               | Mul ArithExp ArithExp
@@ -21,6 +22,7 @@ data Comparison = Eq ArithExp ArithExp
                 | Gt ArithExp ArithExp
                 deriving (Show)
 
+-- not used by AssumeAssert or VC
 data BoolExp = BCmp Comparison
              | BNot BoolExp
              | BDisj BoolExp BoolExp
@@ -38,6 +40,7 @@ data Assertion = ACmp Comparison
                | AParens Assertion
                deriving (Show)
 
+-- not used by VC
 data Statement = Assign Name ArithExp
                | ParAssign Name Name ArithExp ArithExp
                | Write Name ArithExp ArithExp

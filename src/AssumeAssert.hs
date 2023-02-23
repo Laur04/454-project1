@@ -1,14 +1,10 @@
-module AssumeAssert (Program) where
+module AssumeAssert (GCommand(..)) where
 
 import Language(Assertion)
 
-type Var = String
-
-data Statement = Assume Assertion
+data GCommand = Assume Assertion
                | Assert Assertion
-               | Havoc Var
+               | Havoc String
+               | Comb GCommand GCommand
+               | Box GCommand GCommand
                deriving (Show)
-
-type Block = [Statement]
-
-type Program = Block
