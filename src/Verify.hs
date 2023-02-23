@@ -11,7 +11,8 @@ verify :: String -> IO Result
 verify inputProgram = do
   let parsedProgram = parseProg inputProgram
   let assumeAssertedProgram = driverAA parsedProgram
-  let weakestPreProgram = driverWP assumeAssertedProgram
+  putStrLn (show assumeAssertedProgram)
+  -- let weakestPreProgram = driverWP assumeAssertedProgram
 
   -- TODO: verify with SMT solver
 
@@ -49,20 +50,84 @@ tmpGen = do n <- get
 
 -- Main converter to Guarded Command
 toGCommand :: Language.Statement -> State Int AssumeAssert.GCommand
-toGCommand (Assign name arithexp) = do 
+toGCommand (Assign name arithexp) = do
   tmp <- tmpGen
   return (assignHelper name tmp arithexp)
-toGCommand (ParAssign name1 name2 arithexp2 arithexp1) = Comb (assignHelper name1 tmp arithexp1) (assignHelper name2 tmp arithexp2)
-toGCommand (Write name arithexp_index arithexp_value) = writeHelper name tmp arithexp_index arithexp_value
+toGCommand (ParAssign name1 name2 arithexp2 arithexp1) = do
+  tmp <- tmpGen
+  return (Comb (assignHelper name1 tmp arithexp1) (assignHelper name2 tmp arithexp2))
+toGCommand (Write name arithexp_index arithexp_value) = do
+  tmp <- tmpGen
+  return (writeHelper name tmp arithexp_index arithexp_value)
 toGCommand (If boolexp block1 block2) = do
   blk1 <- (blockAA block1)
   blk2 <- (blockAA block2)
   return (Box (Comb (Assume (convertBoolExp boolexp)) (blk1)) (Comb (Assume (convertBoolExp (BNot boolexp))) (blk2)))
-
 toGCommand (While boolexp assns block) = do
-  -- get list of vars
-  -- [ | ] 
-  Comb (Comb (Comb (assertInvariants assns) (DO HAVOC HERE)) (assumeInvariants assns)) (Box (Comb (Comb (Comb (Assume (convertBoolExp boolexp)) (blockAA block)) (assertInvariants assns)) (Assume (ACmp (Eq (Num 0) (Num 1))))) (Assume (convertBoolExp (BNot boolexp))))
+  blk <- (blockAA block)
+  let eleList = getElements block
+  let eleSet = rmdups eleList
+  return (Comb (Comb (Comb (assertInvariants assns) (whileHelper eleSet)) (assumeInvariants assns)) (Box (Comb (Comb (Comb (Assume (convertBoolExp boolexp)) (blk)) (assertInvariants assns)) (Assume (ACmp (Eq (Num 0) (Num 1))))) (Assume (convertBoolExp (BNot boolexp)))))
+
+-- | Helper functions for While
+getElements :: Language.Block -> [String]
+getElements [] = []
+getElements (x : xs) = (helperStatement x) ++ getElements xs
+
+helperStatement :: Language.Statement -> [String]
+helperStatement (Assign name arithexp) = [name] ++ helperArith arithexp
+helperStatement (ParAssign name1 name2 arithexp1 arithexp2) = [name1, name2] ++ (helperArith arithexp1) ++ (helperArith arithexp2)
+helperStatement (Write name arithexp1 arithexp2) = [name] ++ (helperArith arithexp1) ++ (helperArith arithexp2)
+helperStatement (If boolexp block1 block2) = (helperBool boolexp) ++ (getElements block1) ++ (getElements block2)
+helperStatement (While boolexp assns block) = (helperBool boolexp) ++ (helperAssertionList assns) ++ (getElements block)
+
+helperArith :: Language.ArithExp -> [String]
+helperArith (Num Int) = []
+helperArith (Var name) = [name]
+helperArith (Read name arithexp) = [name] ++ (helperArith arithexp)
+helperArith (AWrite name arithexp1 arithexp2) ++ [name] ++ (helperArith arithexp1) ++ (helperArith arithexp2)
+helperArith (Add arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
+helperArith (Sub arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
+helperArith (Mul arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
+helperArith (Div arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
+helperArith (Mod arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
+helperArith (Parens arithexp) = helperArith arithexp
+
+helperComp :: Language.Comparison -> [String]
+helperComp (Eq arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
+helperComp (Neq arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
+helperComp (Le arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
+helperComp (Ge arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
+helperComp (Lt arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
+helperComp (Gt arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
+
+helperBool :: Language.BoolExp -> [String]
+helperBool (BCmp comp) = helperComp comp
+helperBool (BNot boolexp) = helperBool boolexp
+helperBool (BDisj boolexp1 boolexp2) = (helperBool boolexp1) ++ (helperBool boolexp2)
+helperBool (BConj boolexp1 boolexp2) = (helperBool boolexp1) ++ (helperBool boolexp2)
+helperBool (BParens boolexp) = helperBool boolexp
+
+helperAssertionList :: [Language.Assertion] -> [String]
+helperAssertionList [] = []
+helperAssertionList (x : xs) = (helperAssertion x) ++ (helperAssertionList xs)
+
+helperAssertion :: Language.Assertion -> [String]
+helperAssertion (ACmp comp) = helperComp comp
+helperAssertion (ANot assn) = helperAssertion assn
+helperAssertion (ADisj assn1 assn2) = (helperAssertion assn1) ++ (helperAssertion assn2)
+helperAssertion (AConj assn1 assn2) = (helperAssertion assn1) ++ (helperAssertion assn2)
+helperAssertion (Implies assn1 assn2) = (helperAssertion assn1) ++ (helperAssertion assn2)
+helperAssertion (Forall names assn) = names ++ (helperAssertion assn)
+helperAssertion (Exists names assn) = names ++ (helperAssertion assn)
+helperAssertion (AParens assn) = helperAssertion assn
+
+rmdups :: [String] -> [String]
+rmdups = map head . group . sort
+
+whileHelper :: [String]-> AssumeAssert.GCommand
+whileHelper (x) = Havoc x
+whileHelper (x : xs) = Comb (Havoc x) (whileHelper xs)
 
 -- | Helper functions for Assign, ParAssign
 assignHelper :: String -> String -> Language.ArithExp -> AssumeAssert.GCommand
@@ -96,36 +161,36 @@ convertBoolExp (BParens boolexp) = BParens (convertBoolExp boolexp)
 
 -- | BEGIN AssumeAssert to VC Conversion
 
-driverWP :: AssumeAssert.GCommand -> Language.Assertion
-driverWP gc = toVC gc (ACmp (Eq (Int 0) (Int 0)))
+-- driverWP :: AssumeAssert.GCommand -> Language.Assertion
+-- driverWP gc = toVC gc (ACmp (Eq (Int 0) (Int 0)))
 
-toVC :: AssumeAssert.GCommand -> Language.Assertion -> Language.Assertion
-toVC ((Assume b) B) = Implies b B
-toVC ((Assert b) B) = AConj b B
-toVC ((Havoc var) B) = fresh var (execState tmp) B
-toVC ((Comb gc1 gc2) B) = toVC gc1 (toVC gc2 B)
-toVC ((Box gc1 gc2) assn) = AConj (toVC gc1 B) (toVC gc2 B)
+-- toVC :: AssumeAssert.GCommand -> Language.Assertion -> Language.Assertion
+-- toVC ((Assume b) B) = Implies b B
+-- toVC ((Assert b) B) = AConj b B
+-- toVC ((Havoc var) B) = fresh var (execState tmp) B
+-- toVC ((Comb gc1 gc2) B) = toVC gc1 (toVC gc2 B)
+-- toVC ((Box gc1 gc2) assn) = AConj (toVC gc1 B) (toVC gc2 B)
 
-fresh :: String -> String -> Language.Assertion -> Language.Assertion
-fresh (x tmp (ACmp comp)) = ACmp (freshCompHelper x tmp comp)
-fresh (x tmp (ANot B)) = ANot (fresh x tmp B)
-fresh (x tmp (ADisj B1 B2)) = ADisj (fresh x tmp B1) (fresh x tmp B2)
-fresh (x tmp (AConj B1 B2)) = AConj (fresh x tmp B1) (fresh x tmp B2)
-fresh (x tmp (Implies B1 B2)) = Implies (fresh x tmp B1) (fresh x tmp B2)
-fresh (x tmp (Forall names B)) = Forall (freshNameHelper x tmp names) (fresh x tmp B)
-fresh (x tmp (Exists names B)) = Exists (freshNameHelper x tmp names) (fresh x tmp B)
-fresh (x tmp (AParens B)) = AParens (fresh x tmp B)
+-- fresh :: String -> String -> Language.Assertion -> Language.Assertion
+-- fresh (x tmp (ACmp comp)) = ACmp (freshCompHelper x tmp comp)
+-- fresh (x tmp (ANot B)) = ANot (fresh x tmp B)
+-- fresh (x tmp (ADisj B1 B2)) = ADisj (fresh x tmp B1) (fresh x tmp B2)
+-- fresh (x tmp (AConj B1 B2)) = AConj (fresh x tmp B1) (fresh x tmp B2)
+-- fresh (x tmp (Implies B1 B2)) = Implies (fresh x tmp B1) (fresh x tmp B2)
+-- fresh (x tmp (Forall names B)) = Forall (freshNameHelper x tmp names) (fresh x tmp B)
+-- fresh (x tmp (Exists names B)) = Exists (freshNameHelper x tmp names) (fresh x tmp B)
+-- fresh (x tmp (AParens B)) = AParens (fresh x tmp B)
 
-freshNameHelper :: String -> String -> [String] -> [String]
-freshNameHelper var tmp [] = []
-freshNameHelper var tmp (x : xs) = if x == var then tmp ++ (freshNameHelper var tmp xs) else var ++ (freshNameHelper var tmp xs)
+-- freshNameHelper :: String -> String -> [String] -> [String]
+-- freshNameHelper var tmp [] = []
+-- freshNameHelper var tmp (x : xs) = if x == var then tmp ++ (freshNameHelper var tmp xs) else var ++ (freshNameHelper var tmp xs)
 
-freshCompHelper :: String -> String -> Language.Comparison -> Language.Comparison
-freshNameHelper (x tmp (Eq arithexp1 arithexp2)) = Eq (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper (x tmp (Neq arithexp1 arithexp2)) = Neq (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper (x tmp (Le arithexp1 arithexp2)) = Le (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper (x tmp (Ge arithexp1 arithexp2)) = Ge (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper (x tmp (Lt arithexp1 arithexp2)) = Lt (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper (x tmp (Gt arithexp1 arithexp2)) = Gt (replace x tmp arithexp1) (replace x tmp arithexp2)
+-- freshCompHelper :: String -> String -> Language.Comparison -> Language.Comparison
+-- freshNameHelper (x tmp (Eq arithexp1 arithexp2)) = Eq (replace x tmp arithexp1) (replace x tmp arithexp2)
+-- freshNameHelper (x tmp (Neq arithexp1 arithexp2)) = Neq (replace x tmp arithexp1) (replace x tmp arithexp2)
+-- freshNameHelper (x tmp (Le arithexp1 arithexp2)) = Le (replace x tmp arithexp1) (replace x tmp arithexp2)
+-- freshNameHelper (x tmp (Ge arithexp1 arithexp2)) = Ge (replace x tmp arithexp1) (replace x tmp arithexp2)
+-- freshNameHelper (x tmp (Lt arithexp1 arithexp2)) = Lt (replace x tmp arithexp1) (replace x tmp arithexp2)
+-- freshNameHelper (x tmp (Gt arithexp1 arithexp2)) = Gt (replace x tmp arithexp1) (replace x tmp arithexp2)
 
 -- | END AssumeAssert to VC Conversion
