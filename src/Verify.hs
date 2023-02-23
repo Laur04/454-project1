@@ -13,7 +13,7 @@ verify inputProgram = do
   let parsedProgram = parseProg inputProgram
   let assumeAssertedProgram = driverAA parsedProgram
   putStrLn (show assumeAssertedProgram)
-  let weakestPreProgram = driverWP assumeAssertedProgram
+  -- let weakestPreProgram = driverWP assumeAssertedProgram
 
   -- TODO: verify with SMT solver
 
@@ -162,32 +162,32 @@ driverWP :: AssumeAssert.GCommand -> Language.Assertion
 driverWP gc = toVC gc (ACmp (Eq (Int 0) (Int 0)))
 
 toVC :: AssumeAssert.GCommand -> Language.Assertion -> Language.Assertion
-toVC ((Assume b) B) = Implies b B
-toVC ((Assert b) B) = AConj b B
-toVC ((Havoc var) B) = fresh var (execState tmp) B
-toVC ((Comb gc1 gc2) B) = toVC gc1 (toVC gc2 B)
-toVC ((Box gc1 gc2) assn) = AConj (toVC gc1 B) (toVC gc2 B)
+toVC (Assume b) B = Implies b B
+toVC (Assert b) B = AConj b B
+toVC (Havoc var) B = fresh var (execState tmp) B
+toVC (Comb gc1 gc2) B = toVC gc1 (toVC gc2 B)
+toVC (Box gc1 gc2) assn = AConj (toVC gc1 B) (toVC gc2 B)
 
 fresh :: String -> String -> Language.Assertion -> Language.Assertion
-fresh (x tmp (ACmp comp)) = ACmp (freshCompHelper x tmp comp)
-fresh (x tmp (ANot B)) = ANot (fresh x tmp B)
-fresh (x tmp (ADisj B1 B2)) = ADisj (fresh x tmp B1) (fresh x tmp B2)
-fresh (x tmp (AConj B1 B2)) = AConj (fresh x tmp B1) (fresh x tmp B2)
-fresh (x tmp (Implies B1 B2)) = Implies (fresh x tmp B1) (fresh x tmp B2)
-fresh (x tmp (Forall names B)) = Forall (freshNameHelper x tmp names) (fresh x tmp B)
-fresh (x tmp (Exists names B)) = Exists (freshNameHelper x tmp names) (fresh x tmp B)
-fresh (x tmp (AParens B)) = AParens (fresh x tmp B)
+fresh x tmp (ACmp comp) = ACmp (freshCompHelper x tmp comp)
+fresh x tmp (ANot B) = ANot (fresh x tmp B)
+fresh x tmp (ADisj B1 B2) = ADisj (fresh x tmp B1) (fresh x tmp B2)
+fresh x tmp (AConj B1 B2) = AConj (fresh x tmp B1) (fresh x tmp B2)
+fresh x tmp (Implies B1 B2) = Implies (fresh x tmp B1) (fresh x tmp B2)
+fresh x tmp (Forall names B) = Forall (freshNameHelper x tmp names) (fresh x tmp B)
+fresh x tmp (Exists names B) = Exists (freshNameHelper x tmp names) (fresh x tmp B)
+fresh x tmp (AParens B) = AParens (fresh x tmp B)
 
 freshNameHelper :: String -> String -> [String] -> [String]
 freshNameHelper var tmp [] = []
 freshNameHelper var tmp (x : xs) = if x == var then tmp ++ (freshNameHelper var tmp xs) else var ++ (freshNameHelper var tmp xs)
 
 freshCompHelper :: String -> String -> Language.Comparison -> Language.Comparison
-freshNameHelper (x tmp (Eq arithexp1 arithexp2)) = Eq (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper (x tmp (Neq arithexp1 arithexp2)) = Neq (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper (x tmp (Le arithexp1 arithexp2)) = Le (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper (x tmp (Ge arithexp1 arithexp2)) = Ge (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper (x tmp (Lt arithexp1 arithexp2)) = Lt (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper (x tmp (Gt arithexp1 arithexp2)) = Gt (replace x tmp arithexp1) (replace x tmp arithexp2)
+freshNameHelper x tmp (Eq arithexp1 arithexp2) = Eq (replace x tmp arithexp1) (replace x tmp arithexp2)
+freshNameHelper x tmp (Neq arithexp1 arithexp2) = Neq (replace x tmp arithexp1) (replace x tmp arithexp2)
+freshNameHelper x tmp (Le arithexp1 arithexp2) = Le (replace x tmp arithexp1) (replace x tmp arithexp2)
+freshNameHelper x tmp (Ge arithexp1 arithexp2) = Ge (replace x tmp arithexp1) (replace x tmp arithexp2)
+freshNameHelper x tmp (Lt arithexp1 arithexp2) = Lt (replace x tmp arithexp1) (replace x tmp arithexp2)
+freshNameHelper x tmp (Gt arithexp1 arithexp2) = Gt (replace x tmp arithexp1) (replace x tmp arithexp2)
 
 -- | END AssumeAssert to VC Conversion
