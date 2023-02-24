@@ -166,35 +166,53 @@ convertBoolExp (BParens boolexp) = AParens (convertBoolExp boolexp)
 -- | BEGIN AssumeAssert to VC Conversion
 
 driverWP :: AssumeAssert.GCommand -> Language.Assertion
-driverWP gc = toVC gc (ACmp (Eq (Num 0) (Num 0)))
+driverWP gc = evalState (toVC gc (ACmp (Eq (Num 0) (Num 0)))) 0
 
-toVC :: AssumeAssert.GCommand -> Language.Assertion -> Language.Assertion
-toVC (Assume b) B = Implies b B
-toVC (Assert b) B = AConj b B
-toVC (Havoc var) B = fresh var (execState tmp) B
-toVC (Comb gc1 gc2) B = toVC gc1 (toVC gc2 B)
-toVC (Box gc1 gc2) assn = AConj (toVC gc1 B) (toVC gc2 B)
+-- Monad for fresh tmp variables
+tmpGen2 :: State Int String
+tmpGen2 = do 
+  n <- get
+  put (n + 1)
+  return ((show n) ++ "_tmp")
+
+toVC :: AssumeAssert.GCommand -> Language.Assertion -> State Int Language.Assertion
+toVC (Assume b) c = do
+  return (Implies b c)
+toVC (Assert b) c = do
+  return (AConj b c)
+toVC (Havoc var) c = do
+  tmp <- tmpGen2
+  return (fresh var tmp c)
+toVC (Comb gc1 gc2) c = do
+  blk <- (toVC gc2 c)
+  blk2 <- (toVC gc1 blk)
+  return (blk2)
+toVC (Box gc1 gc2) c = do
+  blk1 <- (toVC gc1 c)
+  blk2 <- (toVC gc2 c)
+  return (AConj (blk1) (blk2))
 
 fresh :: String -> String -> Language.Assertion -> Language.Assertion
 fresh x tmp (ACmp comp) = ACmp (freshCompHelper x tmp comp)
-fresh x tmp (ANot B) = ANot (fresh x tmp B)
-fresh x tmp (ADisj B1 B2) = ADisj (fresh x tmp B1) (fresh x tmp B2)
-fresh x tmp (AConj B1 B2) = AConj (fresh x tmp B1) (fresh x tmp B2)
-fresh x tmp (Implies B1 B2) = Implies (fresh x tmp B1) (fresh x tmp B2)
-fresh x tmp (Forall names B) = Forall (freshNameHelper x tmp names) (fresh x tmp B)
-fresh x tmp (Exists names B) = Exists (freshNameHelper x tmp names) (fresh x tmp B)
-fresh x tmp (AParens B) = AParens (fresh x tmp B)
+fresh x tmp (ANot c) = ANot (fresh x tmp c)
+fresh x tmp (ADisj c1 c2) = ADisj (fresh x tmp c1) (fresh x tmp c2)
+fresh x tmp (AConj c1 c2) = AConj (fresh x tmp c1) (fresh x tmp c2)
+fresh x tmp (Implies c1 c2) = Implies (fresh x tmp c1) (fresh x tmp c2)
+fresh x tmp (Forall names c) = Forall (freshNameHelper x tmp names) (fresh x tmp c)
+fresh x tmp (Exists names c) = Exists (freshNameHelper x tmp names) (fresh x tmp c)
+fresh x tmp (AParens c) = AParens (fresh x tmp c)
 
 freshNameHelper :: String -> String -> [String] -> [String]
-freshNameHelper var tmp [] = []
-freshNameHelper var tmp (x : xs) = if x == var then tmp ++ (freshNameHelper var tmp xs) else var ++ (freshNameHelper var tmp xs)
+freshNameHelper _ _ [] = []
+freshNameHelper var tmp [x] = if x == var then [tmp] else [x]
+freshNameHelper var tmp (x : xs) = if x == var then [tmp] ++ (freshNameHelper var tmp xs) else [var] ++ (freshNameHelper var tmp xs)
 
 freshCompHelper :: String -> String -> Language.Comparison -> Language.Comparison
-freshNameHelper x tmp (Eq arithexp1 arithexp2) = Eq (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper x tmp (Neq arithexp1 arithexp2) = Neq (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper x tmp (Le arithexp1 arithexp2) = Le (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper x tmp (Ge arithexp1 arithexp2) = Ge (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper x tmp (Lt arithexp1 arithexp2) = Lt (replace x tmp arithexp1) (replace x tmp arithexp2)
-freshNameHelper x tmp (Gt arithexp1 arithexp2) = Gt (replace x tmp arithexp1) (replace x tmp arithexp2)
+freshCompHelper x tmp (Eq arithexp1 arithexp2) = Eq (replace x tmp arithexp1) (replace x tmp arithexp2)
+freshCompHelper x tmp (Neq arithexp1 arithexp2) = Neq (replace x tmp arithexp1) (replace x tmp arithexp2)
+freshCompHelper x tmp (Le arithexp1 arithexp2) = Le (replace x tmp arithexp1) (replace x tmp arithexp2)
+freshCompHelper x tmp (Ge arithexp1 arithexp2) = Ge (replace x tmp arithexp1) (replace x tmp arithexp2)
+freshCompHelper x tmp (Lt arithexp1 arithexp2) = Lt (replace x tmp arithexp1) (replace x tmp arithexp2)
+freshCompHelper x tmp (Gt arithexp1 arithexp2) = Gt (replace x tmp arithexp1) (replace x tmp arithexp2)
 
 -- | END AssumeAssert to VC Conversion
