@@ -3,7 +3,7 @@ module Verify (Result(..), verify) where
 import Language
 import AssumeAssert
 import Parser.Parser
-import Control.Monad.State
+import Control.Monad.State.Lazy
 
 data Result = Verified | NotVerified | Unknown String
   deriving (Eq, Show)
@@ -12,8 +12,8 @@ verify :: String -> IO Result
 verify inputProgram = do
   let parsedProgram = parseProg inputProgram
   let assumeAssertedProgram = driverAA parsedProgram
-  putStrLn (show assumeAssertedProgram)
-  -- let weakestPreProgram = driverWP assumeAssertedProgram
+  let weakestPreProgram = driverWP assumeAssertedProgram
+  putStrLn (show weakestPreProgram)
 
   -- TODO: verify with SMT solver
 
@@ -22,40 +22,43 @@ verify inputProgram = do
 -- | BEGIN Parser to AssumeAssert Conversion
 
 driverAA :: Language.Program -> AssumeAssert.GCommand
-driverAA ( name, pre, body, post ) = Comb (Comb (assumeInvariants pre) (evalState (blockAA body) 0)) (assertInvariants post)
+driverAA ( _, pre, body, post ) = Comb (Comb (assumeInvariants pre) (evalState (blockAA body) 0)) (assertInvariants post)
 
 -- Handle preconditions and invariants
 assumeInvariants :: [Language.Assertion] -> AssumeAssert.GCommand
-assumeInvariants (x) = Assume x
+assumeInvariants [] = Assume (ACmp (Eq (Num 0) (Num 0)))
+assumeInvariants [x] = Assume x
 assumeInvariants (x : xs) = Comb (Assume x) (assumeInvariants xs)
 
 -- Handle postconditions and invariants
 assertInvariants :: [Language.Assertion] -> AssumeAssert.GCommand
-assertInvariants (x) = Assert x
+assertInvariants [] = Assume (ACmp (Eq (Num 0) (Num 0)))
+assertInvariants [x] = Assert x
 assertInvariants (x : xs) = Comb (Assert x) (assertInvariants xs)
 
 -- Handle program block
-blockAA :: Language.Block -> State Int [AssumeAssert.GCommand]
+blockAA :: Language.Block -> State Int AssumeAssert.GCommand
 blockAA (xs) = do 
   gcommds <- (mapM (toGCommand) xs)
-  return (foldr (AssumeAssert.Comb) (Assume (ACmp (Eq (Int 0) (Int 0)))) gcommds)
+  return (foldr (AssumeAssert.Comb) (Assume (ACmp (Eq (Num 0) (Num 0)))) gcommds)
   -- (Statement -> State Int Command) -> [Statement] -> State Int [Command]
 
 -- Monad for tmp variables
 tmpGen :: State Int String
-tmpGen = do { n <- get
-        put (n + 1)
-        return "tmp_" ++ (show n) }
+tmpGen = do 
+  n <- get
+  put (n + 1)
+  return ("tmp_" ++ (show n))
 
 -- Main converter to Guarded Command
 toGCommand :: Language.Statement -> State Int AssumeAssert.GCommand
-toGCommand (Assign name arithexp) = do
+toGCommand (Assign x arithexp) = do
   tmp <- tmpGen
   return (Comb (Comb (Assume (ACmp (Eq (Var tmp) (Var x)))) (Havoc x)) (Assume (ACmp (Eq (Var x) (replace x tmp arithexp)))))
-toGCommand (ParAssign name1 name2 arithexp2 arithexp1) = do
+toGCommand (ParAssign x1 x2 arithexp2 arithexp1) = do
   tmp1 <- tmpGen
   tmp2 <- tmpGen
-  return (Comb (Comb (Comb (Assume (ACmp (Eq (Var tmp1) (Var x)))) (Havoc x)) (Assume (ACmp (Eq (Var x) (replace x tmp1 arithexp))))) (Comb (Comb (Assume (ACmp (Eq (Var tmp2) (Var x)))) (Havoc x)) (Assume (ACmp (Eq (Var x) (replace x tmp2 arithexp))))))
+  return (Comb (Comb (Comb (Assume (ACmp (Eq (Var tmp1) (Var x1)))) (Havoc x1)) (Assume (ACmp (Eq (Var x1) (replace x1 tmp1 arithexp1))))) (Comb (Comb (Assume (ACmp (Eq (Var tmp2) (Var x2)))) (Havoc x2)) (Assume (ACmp (Eq (Var x2) (replace x2 tmp2 arithexp2))))))
 toGCommand (Write name arithexp_index arithexp_value) = do
   tmp <- tmpGen
   return (writeHelper name tmp arithexp_index arithexp_value)
@@ -82,7 +85,7 @@ helperStatement (If boolexp block1 block2) = (helperBool boolexp) ++ (getElement
 helperStatement (While boolexp assns block) = (helperBool boolexp) ++ (helperAssertionList assns) ++ (getElements block)
 
 helperArith :: Language.ArithExp -> [String]
-helperArith (Num Int) = []
+helperArith (Num _) = []
 helperArith (Var name) = [name]
 helperArith (Read name arithexp) = [name] ++ (helperArith arithexp)
 helperArith (AWrite name arithexp1 arithexp2) = [name] ++ (helperArith arithexp1) ++ (helperArith arithexp2)
@@ -123,16 +126,20 @@ helperAssertion (Exists names assn) = names ++ (helperAssertion assn)
 helperAssertion (AParens assn) = helperAssertion assn
 
 rmdups :: [String] -> [String]
-rmdups = map head . group . sort
+rmdups [] = []
+rmdups (x:xs)   | x `elem` xs   = rmdups xs
+                | otherwise     = x : rmdups xs
 
 whileHelper :: [String]-> AssumeAssert.GCommand
-whileHelper (x) = Havoc x
+whileHelper [] = Assume (ACmp (Eq (Num 0) (Num 0)))
+whileHelper [x] = Havoc x
 whileHelper (x : xs) = Comb (Havoc x) (whileHelper xs)
 
 -- | Helper functions for Assign, ParAssign
 replace :: String -> String -> Language.ArithExp -> Language.ArithExp
-replace x tmp (Num i) = Num i
+replace _ _ (Num i) = Num i
 replace x tmp (Var name) = if x == name then Var tmp else Var name
+replace x tmp (AWrite name arithexp1 arithexp2) = if x == name then AWrite tmp (replace x tmp arithexp1) (replace x tmp arithexp2) else AWrite name (replace x tmp arithexp1) (replace x tmp arithexp2)
 replace x tmp (Read name arithexp) = if x == name then Read tmp (replace x tmp arithexp) else Read name (replace x tmp arithexp)
 replace x tmp (Add arithexp1 arithexp2) = Add (replace x tmp arithexp1) (replace x tmp arithexp2)
 replace x tmp (Sub arithexp1 arithexp2) = Sub (replace x tmp arithexp1) (replace x tmp arithexp2)
@@ -149,9 +156,9 @@ writeHelper x tmp index value = Comb (Comb (Assume (ACmp (Eq (Var tmp) (Var x)))
 convertBoolExp :: Language.BoolExp -> Language.Assertion
 convertBoolExp (BCmp comp) = ACmp comp
 convertBoolExp (BNot boolexp) = ANot (convertBoolExp boolexp)
-convertBoolExp (BDisj boolexp) = BDisj (convertBoolExp boolexp)
-convertBoolExp (BConj boolexp) = BConj (convertBoolExp boolexp)
-convertBoolExp (BParens boolexp) = BParens (convertBoolExp boolexp)
+convertBoolExp (BDisj boolexp1 boolexp2) = ADisj (convertBoolExp boolexp1) (convertBoolExp boolexp2)
+convertBoolExp (BConj boolexp1 boolexp2) = AConj (convertBoolExp boolexp1) (convertBoolExp boolexp2)
+convertBoolExp (BParens boolexp) = AParens (convertBoolExp boolexp)
 
 -- | END Parser to AssumeAssert Conversion
 
@@ -159,7 +166,7 @@ convertBoolExp (BParens boolexp) = BParens (convertBoolExp boolexp)
 -- | BEGIN AssumeAssert to VC Conversion
 
 driverWP :: AssumeAssert.GCommand -> Language.Assertion
-driverWP gc = toVC gc (ACmp (Eq (Int 0) (Int 0)))
+driverWP gc = toVC gc (ACmp (Eq (Num 0) (Num 0)))
 
 toVC :: AssumeAssert.GCommand -> Language.Assertion -> Language.Assertion
 toVC (Assume b) B = Implies b B
