@@ -4,6 +4,8 @@ import Language
 import AssumeAssert
 import Parser.Parser
 import Control.Monad.State.Lazy
+import System.Process
+
 
 data Result = Verified | NotVerified | Unknown String
   deriving (Eq, Show)
@@ -13,14 +15,15 @@ verify inputProgram = do
   let parsedProgram = parseProg inputProgram
   let assumeAssertedProgram = driverAA parsedProgram
   let weakestPreProgram = driverWP assumeAssertedProgram
-  putStrLn (show weakestPreProgram)
-
-  -- TODO: verify with SMT solver
-
+  putStrLn (show weakestPreProgram ++ "\n")
+  let smtString = driverSMTLIB weakestPreProgram 
+  putStrLn (show smtString ++ "\n")
+  out <- readProcess ["z3", "file"] smtString
   return Verified
 
+--------------------------------------------
 -- | BEGIN Parser to AssumeAssert Conversion
-
+--------------------------------------------
 driverAA :: Language.Program -> AssumeAssert.GCommand
 driverAA ( _, pre, body, post ) = Comb (Comb (assumeInvariants pre) (evalState (blockAA body) 0)) (assertInvariants post)
 
@@ -159,12 +162,14 @@ convertBoolExp (BNot boolexp) = ANot (convertBoolExp boolexp)
 convertBoolExp (BDisj boolexp1 boolexp2) = ADisj (convertBoolExp boolexp1) (convertBoolExp boolexp2)
 convertBoolExp (BConj boolexp1 boolexp2) = AConj (convertBoolExp boolexp1) (convertBoolExp boolexp2)
 convertBoolExp (BParens boolexp) = AParens (convertBoolExp boolexp)
-
+--------------------------------------------
 -- | END Parser to AssumeAssert Conversion
+--------------------------------------------
 
 
+--------------------------------------------
 -- | BEGIN AssumeAssert to VC Conversion
-
+--------------------------------------------
 driverWP :: AssumeAssert.GCommand -> Language.Assertion
 driverWP gc = evalState (toVC gc (ACmp (Eq (Num 0) (Num 0)))) 0
 
@@ -173,7 +178,7 @@ tmpGen2 :: State Int String
 tmpGen2 = do 
   n <- get
   put (n + 1)
-  return ((show n) ++ "_tmp")
+  return (show n ++ "_tmp")
 
 toVC :: AssumeAssert.GCommand -> Language.Assertion -> State Int Language.Assertion
 toVC (Assume b) c = do
@@ -214,5 +219,59 @@ freshCompHelper x tmp (Le arithexp1 arithexp2) = Le (replace x tmp arithexp1) (r
 freshCompHelper x tmp (Ge arithexp1 arithexp2) = Ge (replace x tmp arithexp1) (replace x tmp arithexp2)
 freshCompHelper x tmp (Lt arithexp1 arithexp2) = Lt (replace x tmp arithexp1) (replace x tmp arithexp2)
 freshCompHelper x tmp (Gt arithexp1 arithexp2) = Gt (replace x tmp arithexp1) (replace x tmp arithexp2)
-
+--------------------------------------------
 -- | END AssumeAssert to VC Conversion
+--------------------------------------------
+
+
+
+--------------------------------------------
+-- | BEGIN VC to SMT LIB Conversion 
+--------------------------------------------
+driverSMTLIB :: Language.Assertion -> String
+driverSMTLIB vc = setLogic ++ declareFuns (helperAssertion vc) ++ "(assert" ++ toSMTLIB vc ++ ")\n(check-sat)\n"
+  
+setLogic :: String
+setLogic = "(set-logic QF_AUFBV)\n"
+
+-- this needs work for array names and shit
+declareFuns :: [String] -> String 
+declareFuns [] = []
+declareFuns (x:xs) = "(declare-fun " ++ x ++ " () Int) \n" ++ declareFuns xs
+
+-- NOTE: Helper Assertion returns the var names from a big assertion
+
+toSMTLIB :: Language.Assertion -> String
+toSMTLIB (ACmp comp) = toSMTLIBComp comp
+toSMTLIB (ANot c) = "(not " ++ toSMTLIB c ++ ")"
+toSMTLIB (ADisj c1 c2) = "(or " ++ toSMTLIB c1 ++ " " ++ toSMTLIB c2 ++ ")"
+toSMTLIB (AConj c1 c2) = "(and " ++ toSMTLIB c1 ++ " " ++ toSMTLIB c2 ++ ")"
+toSMTLIB (Implies c1 c2) = "(=> " ++ toSMTLIB c1 ++ " " ++ toSMTLIB c2 ++ ")"
+toSMTLIB (Forall names c) = "(forall (" ++ toSMTLIBNames names ++ ") " ++ toSMTLIB c ++ ")"
+toSMTLIB (Exists names c) = "(exists (" ++ toSMTLIBNames names ++ ") " ++ toSMTLIB c ++ ")"
+toSMTLIB (AParens c) = "(" ++ toSMTLIB c ++ ")"
+
+toSMTLIBNames :: [String] -> String
+toSMTLIBNames [] = []
+toSMTLIBNames (x:xs) = "(" ++ x ++ " Int)" ++ toSMTLIBNames xs
+
+toSMTLIBComp :: Language.Comparison -> String
+toSMTLIBComp (Eq arithexp1 arithexp2) = "(= " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
+toSMTLIBComp (Neq arithexp1 arithexp2) = "(not (= " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ "))"
+toSMTLIBComp (Le arithexp1 arithexp2) = "(<= " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
+toSMTLIBComp (Ge arithexp1 arithexp2) = "(>= " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
+toSMTLIBComp (Lt arithexp1 arithexp2) = "(< " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
+toSMTLIBComp (Gt arithexp1 arithexp2) = "(> " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
+
+toSMTLIBArith :: Language.ArithExp -> String
+toSMTLIBArith (Num n) = show n
+toSMTLIBArith (Var x) = x
+toSMTLIBArith (Read x arithexp) = "(select " ++ x ++ " " ++ toSMTLIBArith arithexp ++ ")"
+toSMTLIBArith (AWrite x arithexp1 arithexp2) = "(store " ++ x ++ " " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
+toSMTLIBArith (Add arithexp1 arithexp2) = "(+ " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
+toSMTLIBArith (Sub arithexp1 arithexp2) = "(- " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
+toSMTLIBArith (Mul arithexp1 arithexp2) = "(* " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
+toSMTLIBArith (Div arithexp1 arithexp2) = "(div " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
+toSMTLIBArith (Mod arithexp1 arithexp2) = "(mod " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
+toSMTLIBArith (Parens arithexp) = "(" ++ toSMTLIBArith arithexp ++ ")"
+--------------------------------------------

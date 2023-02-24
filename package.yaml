@@ -26,6 +26,7 @@ dependencies:
 - array
 - directory
 - mtl
+- process
 
 ghc-options:
 - -Wall
