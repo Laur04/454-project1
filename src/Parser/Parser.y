@@ -90,7 +90,7 @@ assn :: { Assertion }
 
 names :: { [Name] }
     : names name { $2 : $1 }
-    | name { [] }
+    | name { [$1] }
 
 block :: { Block }
     : block_rev { reverse $1 }

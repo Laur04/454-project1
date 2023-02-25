@@ -8,22 +8,30 @@ import System.Process
 import Data.List
 
 
+
 data Result = Verified | NotVerified | Unknown String
   deriving (Eq, Show)
 
 verify :: String -> IO Result
 verify inputProgram = do
+  -- putStrLn (show inputProgram ++ "\n") 
   let parsedProgram = parseProg inputProgram
+  -- putStrLn (show parsedProgram ++ "\n") 
   let assumeAssertedProgram = driverAA parsedProgram
+  -- putStrLn (show assumeAssertedProgram ++ "\n")
   let weakestPreProgram = driverWP assumeAssertedProgram
   -- putStrLn (show weakestPreProgram ++ "\n")
   let smtString = driverSMTLIB weakestPreProgram 
-  putStrLn(smtString ++ "\n")
-  -- out <- readProcess "z3" [] smtString
-  -- putStrLn ( out ++ "\n")
+  putStrLn(smtString)
+  out <- readProcess "z3" ["-in"] smtString
+  putStrLn(out) 
+  return (toReturn (head (lines out)))
+  -- return Verified
 
-  return Verified
-
+toReturn :: String -> Result
+toReturn "unsat" = Verified
+toReturn "sat" = NotVerified
+toReturn _ = Unknown "Z3 returned unknown"
 --------------------------------------------
 -- | BEGIN Parser to AssumeAssert Conversion
 --------------------------------------------
@@ -54,14 +62,14 @@ tmpGen :: State Int String
 tmpGen = do 
   n <- get
   put (n + 1)
-  return ("tmp_" ++ (show n))
+  return ("AAtmp_" ++ (show n))
 
 -- Main converter to Guarded Command
 toGCommand :: Language.Statement -> State Int AssumeAssert.GCommand
 toGCommand (Assign x arithexp) = do
   tmp <- tmpGen
   return (Comb (Comb (Assume (ACmp (Eq (Var tmp) (Var x)))) (Havoc x)) (Assume (ACmp (Eq (Var x) (replace x tmp arithexp)))))
-toGCommand (ParAssign x1 x2 arithexp2 arithexp1) = do
+toGCommand (ParAssign x1 x2 arithexp1 arithexp2) = do
   tmp1 <- tmpGen
   tmp2 <- tmpGen
   return (Comb (Comb (Comb (Assume (ACmp (Eq (Var tmp1) (Var x1)))) (Havoc x1)) (Assume (ACmp (Eq (Var x1) (replace x1 tmp1 arithexp1))))) (Comb (Comb (Assume (ACmp (Eq (Var tmp2) (Var x2)))) (Havoc x2)) (Assume (ACmp (Eq (Var x2) (replace x2 tmp2 arithexp2))))))
@@ -127,9 +135,13 @@ helperAssertion (ANot assn) = helperAssertion assn
 helperAssertion (ADisj assn1 assn2) = (helperAssertion assn1) ++ (helperAssertion assn2)
 helperAssertion (AConj assn1 assn2) = (helperAssertion assn1) ++ (helperAssertion assn2)
 helperAssertion (Implies assn1 assn2) = (helperAssertion assn1) ++ (helperAssertion assn2)
-helperAssertion (Forall names assn) = names ++ (helperAssertion assn)
-helperAssertion (Exists names assn) = names ++ (helperAssertion assn)
+helperAssertion (Forall names assn) = helperNames names ++ (helperAssertion assn)
+helperAssertion (Exists names assn) = helperNames names ++ (helperAssertion assn)
 helperAssertion (AParens assn) = helperAssertion assn
+
+helperNames :: [String] -> [String]
+helperNames [] = []
+helperNames (x : xs) = [x] ++ (helperNames xs)
 
 -- rmdups :: [String] -> [String]
 -- rmdups [] = []
@@ -184,7 +196,7 @@ tmpGen2 :: State Int String
 tmpGen2 = do 
   n <- get
   put (n + 1)
-  return ("tmp__" ++ show n)
+  return ("VCtmp__" ++ show n)
 
 toVC :: AssumeAssert.GCommand -> Language.Assertion -> State Int Language.Assertion
 toVC (Assume b) c = do
@@ -235,10 +247,10 @@ freshCompHelper x tmp (Gt arithexp1 arithexp2) = Gt (replace x tmp arithexp1) (r
 -- | BEGIN VC to SMT LIB Conversion 
 --------------------------------------------
 driverSMTLIB :: Language.Assertion -> String
-driverSMTLIB vc = setLogic ++ declareFuns (rmdups (helperAssertion vc)) ++ "(assert " ++ toSMTLIB vc ++ ")" ++ "\n" ++"(check-sat)"
+driverSMTLIB vc = setLogic ++ declareFuns (rmdups (helperAssertion vc)) ++ "(assert (not " ++ toSMTLIB vc ++ "))" ++ "\n" ++"(check-sat)"
   
 setLogic :: String
-setLogic = "(set-logic QF_LIA)" ++ "\n"
+setLogic = "(set-logic QF_AUFNIA)" ++ "\n"
 
 -- this needs work for array names and shit
 declareFuns :: [String] -> String 
@@ -253,13 +265,17 @@ toSMTLIB (ANot c) = "(not " ++ toSMTLIB c ++ ")"
 toSMTLIB (ADisj c1 c2) = "(or " ++ toSMTLIB c1 ++ " " ++ toSMTLIB c2 ++ ")"
 toSMTLIB (AConj c1 c2) = "(and " ++ toSMTLIB c1 ++ " " ++ toSMTLIB c2 ++ ")"
 toSMTLIB (Implies c1 c2) = "(=> " ++ toSMTLIB c1 ++ " " ++ toSMTLIB c2 ++ ")"
-toSMTLIB (Forall names c) = "(forall (" ++ toSMTLIBNames names ++ ") " ++ toSMTLIB c ++ ")"
-toSMTLIB (Exists names c) = "(exists (" ++ toSMTLIBNames names ++ ") " ++ toSMTLIB c ++ ")"
-toSMTLIB (AParens c) = "(" ++ toSMTLIB c ++ ")"
+toSMTLIB (Forall names c) = "(forall (" ++ toSMTLIBNames names ++ ")" ++ toSMTLIB c ++ ")"
+toSMTLIB (Exists names c) = "(exists (" ++ toSMTLIBNames names ++ ")" ++ toSMTLIB c ++ ")"
+toSMTLIB (AParens c) = toSMTLIB c
+-- toSMTLIB (AParens c) = "(TEST " ++ toSMTLIB c ++ ")"
+
+-- assertSMTParens :: Language.Assertion -> String
+-- assertSMTParens (ACmp comp) = toSMTLIBComp comp
 
 toSMTLIBNames :: [String] -> String
 toSMTLIBNames [] = []
-toSMTLIBNames (x:xs) = "(" ++ x ++ " Int)" ++ toSMTLIBNames xs
+toSMTLIBNames (x:xs) = "(" ++ x ++ " Int) " ++ toSMTLIBNames xs
 
 toSMTLIBComp :: Language.Comparison -> String
 toSMTLIBComp (Eq arithexp1 arithexp2) = "(= " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
@@ -279,5 +295,5 @@ toSMTLIBArith (Sub arithexp1 arithexp2) = "(- " ++ toSMTLIBArith arithexp1 ++ " 
 toSMTLIBArith (Mul arithexp1 arithexp2) = "(* " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
 toSMTLIBArith (Div arithexp1 arithexp2) = "(div " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
 toSMTLIBArith (Mod arithexp1 arithexp2) = "(mod " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
-toSMTLIBArith (Parens arithexp) = "(" ++ toSMTLIBArith arithexp ++ ")"
+toSMTLIBArith (Parens arithexp) = toSMTLIBArith arithexp
 --------------------------------------------
