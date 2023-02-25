@@ -249,8 +249,8 @@ freshCompHelper x tmp (Gt arithexp1 arithexp2) = Gt (replace x tmp arithexp1) (r
 -- | BEGIN VC to SMT LIB Conversion 
 --------------------------------------------
 driverSMTLIB :: Language.Assertion -> String
--- driverSMTLIB vc = setLogic ++ declareFuns (rmdups (getIVarAssertion vc)) ++ "(assert (not " ++ toSMTLIB vc ++ "))" ++ "\n" ++"(check-sat)"
-driverSMTLIB vc = setLogic ++ declareFuns (rmdups (helperAssertion vc)) ++ "(assert (not " ++ toSMTLIB vc ++ "))" ++ "\n" ++"(check-sat)"
+driverSMTLIB vc = setLogic ++ declareFuns (rmdups (getIVarAssertion vc)) ++ declareArrVars (rmdups (getArrVarAssertion vc)) ++ "(assert (not " ++ toSMTLIB vc ++ "))" ++ "\n" ++"(check-sat)"
+-- driverSMTLIB vc = setLogic ++ declareFuns (rmdups (helperAssertion vc)) ++ "(assert (not " ++ toSMTLIB vc ++ "))" ++ "\n" ++"(check-sat)"
   
 setLogic :: String
 setLogic = "(set-logic QF_AUFNIA)" ++ "\n"
@@ -259,6 +259,10 @@ setLogic = "(set-logic QF_AUFNIA)" ++ "\n"
 declareFuns :: [String] -> String 
 declareFuns [] = []
 declareFuns (x:xs) = "(declare-fun " ++ x ++ " () Int)"++ "\n" ++ declareFuns xs
+
+declareArrVars :: [String] -> String 
+declareArrVars [] = []
+declareArrVars (x:xs) = "(declare-fun " ++ x ++ " () (Array Int Int))"++ "\n" ++ declareFuns xs
 
 -- NOTE: Helper Assertion returns the var names from a big assertion
 
