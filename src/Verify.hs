@@ -249,11 +249,19 @@ freshCompHelper x tmp (Gt arithexp1 arithexp2) = Gt (replace x tmp arithexp1) (r
 -- | BEGIN VC to SMT LIB Conversion 
 --------------------------------------------
 driverSMTLIB :: Language.Assertion -> String
-driverSMTLIB vc = setLogic ++ declareFuns (rmdups (getIVarAssertion vc)) ++ declareArrVars (rmdups (getArrVarAssertion vc)) ++ "(assert (not " ++ toSMTLIB vc ++ "))" ++ "\n" ++"(check-sat)"
+driverSMTLIB vc = setLogic ++ declareFuns (rebuild (rmdups (getIVarAssertion vc)) (rmdups (getArrVarAssertion vc))) ++ declareArrVars (rmdups (getArrVarAssertion vc)) ++ "(assert (not " ++ toSMTLIB vc ++ "))" ++ "\n" ++"(check-sat)"
 -- driverSMTLIB vc = setLogic ++ declareFuns (rmdups (helperAssertion vc)) ++ "(assert (not " ++ toSMTLIB vc ++ "))" ++ "\n" ++"(check-sat)"
   
 setLogic :: String
 setLogic = "(set-logic QF_AUFNIA)" ++ "\n"
+
+rebuild :: [String] -> [String] -> [String]
+rebuild [] strs = []
+rebuild [x] strs = removeItem x strs
+rebuild (x : xs) strs = (removeItem x strs) ++ (rebuild xs strs)
+
+removeItem :: String -> [String] -> [String]
+removeItem str strs = if (elem str strs) then [] else [str]
 
 -- this needs work for array names and shit
 declareFuns :: [String] -> String 
