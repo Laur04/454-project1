@@ -1,0 +1,13 @@
+program xnorGate
+  pre a = 0 || a = 1
+  pre b = 0 || b = 1
+  post y = 0 || y = 1
+  post y != (a + b) % 2
+is
+  boolSum := a + b;
+  carry := 0;
+  if boolSum > 1 then
+    boolSum := 0;
+    carry := 1;
+  end
+end
