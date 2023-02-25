@@ -125,6 +125,10 @@ helperBool (BDisj boolexp1 boolexp2) = (helperBool boolexp1) ++ (helperBool bool
 helperBool (BConj boolexp1 boolexp2) = (helperBool boolexp1) ++ (helperBool boolexp2)
 helperBool (BParens boolexp) = helperBool boolexp
 
+helperNames :: [String] -> [String]
+helperNames [] = []
+helperNames (x : xs) = [x] ++ (helperNames xs)
+
 helperAssertionList :: [Language.Assertion] -> [String]
 helperAssertionList [] = []
 helperAssertionList (x : xs) = (helperAssertion x) ++ (helperAssertionList xs)
@@ -139,9 +143,7 @@ helperAssertion (Forall names assn) = helperNames names ++ (helperAssertion assn
 helperAssertion (Exists names assn) = helperNames names ++ (helperAssertion assn)
 helperAssertion (AParens assn) = helperAssertion assn
 
-helperNames :: [String] -> [String]
-helperNames [] = []
-helperNames (x : xs) = [x] ++ (helperNames xs)
+
 
 -- rmdups :: [String] -> [String]
 -- rmdups [] = []
@@ -247,6 +249,7 @@ freshCompHelper x tmp (Gt arithexp1 arithexp2) = Gt (replace x tmp arithexp1) (r
 -- | BEGIN VC to SMT LIB Conversion 
 --------------------------------------------
 driverSMTLIB :: Language.Assertion -> String
+-- driverSMTLIB vc = setLogic ++ declareFuns (rmdups (getIVarAssertion vc)) ++ "(assert (not " ++ toSMTLIB vc ++ "))" ++ "\n" ++"(check-sat)"
 driverSMTLIB vc = setLogic ++ declareFuns (rmdups (helperAssertion vc)) ++ "(assert (not " ++ toSMTLIB vc ++ "))" ++ "\n" ++"(check-sat)"
   
 setLogic :: String
@@ -297,3 +300,163 @@ toSMTLIBArith (Div arithexp1 arithexp2) = "(div " ++ toSMTLIBArith arithexp1 ++ 
 toSMTLIBArith (Mod arithexp1 arithexp2) = "(mod " ++ toSMTLIBArith arithexp1 ++ " " ++ toSMTLIBArith arithexp2 ++ ")"
 toSMTLIBArith (Parens arithexp) = toSMTLIBArith arithexp
 --------------------------------------------
+
+
+--------------------------------------------
+-- | Integer Vars for declaration at top of SMTLIB String
+--------------------------------------------
+
+getIVarArith :: Language.ArithExp -> [String]
+getIVarArith (Num _) = []
+getIVarArith (Var name) = [name]
+getIVarArith (Read _ arithexp) = getIVarArith arithexp
+getIVarArith (AWrite _ arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+getIVarArith (Add arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+getIVarArith (Sub arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+getIVarArith (Mul arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+getIVarArith (Div arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+getIVarArith (Mod arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+getIVarArith (Parens arithexp) = getIVarArith arithexp
+
+getIVarComp :: Language.Comparison -> [String]
+getIVarComp (Eq (AWrite _ _ _) (AWrite _ _ _)) = []
+getIVarComp (Eq (AWrite _ _ _) arithexp2) = (getIVarArith arithexp2)
+getIVarComp (Eq arithexp1 (AWrite _ _ _)) = (getIVarArith arithexp1)
+getIVarComp (Eq (Read _ _) (Read _ _)) = []
+getIVarComp (Eq (Read _ _) arithexp2) = (getIVarArith arithexp2)
+getIVarComp (Eq arithexp1 (Read _ _)) = (getIVarArith arithexp1)
+getIVarComp (Eq arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+getIVarComp (Neq (AWrite _ _ _) (AWrite _ _ _)) = []
+getIVarComp (Neq (AWrite _ _ _) arithexp2) = (getIVarArith arithexp2)
+getIVarComp (Neq arithexp1 (AWrite _ _ _)) = (getIVarArith arithexp1)
+getIVarComp (Neq (Read _ _) (Read _ _)) = []
+getIVarComp (Neq (Read _ _) arithexp2) = (getIVarArith arithexp2)
+getIVarComp (Neq arithexp1 (Read _ _)) = (getIVarArith arithexp1)
+getIVarComp (Neq arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+getIVarComp (Le (AWrite _ _ _) (AWrite _ _ _)) = []
+getIVarComp (Le (AWrite _ _ _) arithexp2) = (getIVarArith arithexp2)
+getIVarComp (Le arithexp1 (AWrite _ _ _)) = (getIVarArith arithexp1)
+getIVarComp (Le (Read _ _) (Read _ _)) = []
+getIVarComp (Le (Read _ _) arithexp2) = (getIVarArith arithexp2)
+getIVarComp (Le arithexp1 (Read _ _)) = (getIVarArith arithexp1)
+getIVarComp (Le arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+getIVarComp (Ge (AWrite _ _ _) (AWrite _ _ _)) = []
+getIVarComp (Ge (AWrite _ _ _) arithexp2) = (getIVarArith arithexp2)
+getIVarComp (Ge arithexp1 (AWrite _ _ _)) = (getIVarArith arithexp1)
+getIVarComp (Ge (Read _ _) (Read _ _)) = []
+getIVarComp (Ge (Read _ _) arithexp2) = (getIVarArith arithexp2)
+getIVarComp (Ge arithexp1 (Read _ _)) = (getIVarArith arithexp1)
+getIVarComp (Ge arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+getIVarComp (Lt (AWrite _ _ _) (AWrite _ _ _)) = []
+getIVarComp (Lt (AWrite _ _ _) arithexp2) = (getIVarArith arithexp2)
+getIVarComp (Lt arithexp1 (AWrite _ _ _)) = (getIVarArith arithexp1)
+getIVarComp (Lt (Read _ _) (Read _ _)) = []
+getIVarComp (Lt (Read _ _) arithexp2) = (getIVarArith arithexp2)
+getIVarComp (Lt arithexp1 (Read _ _)) = (getIVarArith arithexp1)
+getIVarComp (Lt arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+getIVarComp (Gt (AWrite _ _ _) (AWrite _ _ _)) = []
+getIVarComp (Gt (AWrite _ _ _) arithexp2) = (getIVarArith arithexp2)
+getIVarComp (Gt arithexp1 (AWrite _ _ _)) = (getIVarArith arithexp1)
+getIVarComp (Gt (Read _ _) (Read _ _)) = []
+getIVarComp (Gt (Read _ _) arithexp2) = (getIVarArith arithexp2)
+getIVarComp (Gt arithexp1 (Read _ _)) = (getIVarArith arithexp1)
+getIVarComp (Gt arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarComp (Eq arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarComp (Neq arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarComp (Le arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarComp (Ge arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarComp (Lt arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarComp (Gt arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+
+getIVarNames :: [String] -> [String]
+getIVarNames [] = []
+getIVarNames (x : xs) = [x] ++ (getIVarNames xs)
+
+getIVarAssertion :: Language.Assertion -> [String]
+getIVarAssertion (ACmp comp) = getIVarComp comp
+getIVarAssertion (ANot assn) = getIVarAssertion assn
+getIVarAssertion (ADisj assn1 assn2) = (getIVarAssertion assn1) ++ (getIVarAssertion assn2)
+getIVarAssertion (AConj assn1 assn2) = (getIVarAssertion assn1) ++ (getIVarAssertion assn2)
+getIVarAssertion (Implies assn1 assn2) = (getIVarAssertion assn1) ++ (getIVarAssertion assn2)
+getIVarAssertion (Forall names assn) = getIVarNames names ++ (getIVarAssertion assn)
+getIVarAssertion (Exists names assn) = getIVarNames names ++ (getIVarAssertion assn)
+getIVarAssertion (AParens assn) = getIVarAssertion assn
+
+----------------------------------------------------------------------------------------
+-- | Array Vars for declaration at top of SMTLIB String
+----------------------------------------------------------------------------------------
+-- getIVarArith :: Language.ArithExp -> [String]
+-- getIVarArith (Num _) = []
+-- getIVarArith (Var name) = [name]
+-- getIVarArith (Read _ arithexp) = getIVarArith arithexp
+-- getIVarArith (AWrite _ arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarArith (Add arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarArith (Sub arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarArith (Mul arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarArith (Div arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarArith (Mod arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarArith (Parens arithexp) = getIVarArith arithexp
+
+-- getIVarComp :: Language.Comparison -> [String]
+-- getIVarComp (Eq (AWrite _ _ _) (AWrite _ _ _)) = []
+-- getIVarComp (Eq (AWrite _ _ _) arithexp2) = (getIVarArith arithexp2)
+-- getIVarComp (Eq arithexp1 (AWrite _ _ _)) = (getIVarArith arithexp1)
+-- getIVarComp (Eq (Read _ _) (Read _ _)) = []
+-- getIVarComp (Eq (Read _ _) arithexp2) = (getIVarArith arithexp2)
+-- getIVarComp (Eq arithexp1 (Read _ _)) = (getIVarArith arithexp1)
+-- getIVarComp (Eq arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarComp (Neq (AWrite _ _ _) (AWrite _ _ _)) = []
+-- getIVarComp (Neq (AWrite _ _ _) arithexp2) = (getIVarArith arithexp2)
+-- getIVarComp (Neq arithexp1 (AWrite _ _ _)) = (getIVarArith arithexp1)
+-- getIVarComp (Neq (Read _ _) (Read _ _)) = []
+-- getIVarComp (Neq (Read _ _) arithexp2) = (getIVarArith arithexp2)
+-- getIVarComp (Neq arithexp1 (Read _ _)) = (getIVarArith arithexp1)
+-- getIVarComp (Neq arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarComp (Le (AWrite _ _ _) (AWrite _ _ _)) = []
+-- getIVarComp (Le (AWrite _ _ _) arithexp2) = (getIVarArith arithexp2)
+-- getIVarComp (Le arithexp1 (AWrite _ _ _)) = (getIVarArith arithexp1)
+-- getIVarComp (Le (Read _ _) (Read _ _)) = []
+-- getIVarComp (Le (Read _ _) arithexp2) = (getIVarArith arithexp2)
+-- getIVarComp (Le arithexp1 (Read _ _)) = (getIVarArith arithexp1)
+-- getIVarComp (Le arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarComp (Ge (AWrite _ _ _) (AWrite _ _ _)) = []
+-- getIVarComp (Ge (AWrite _ _ _) arithexp2) = (getIVarArith arithexp2)
+-- getIVarComp (Ge arithexp1 (AWrite _ _ _)) = (getIVarArith arithexp1)
+-- getIVarComp (Ge (Read _ _) (Read _ _)) = []
+-- getIVarComp (Ge (Read _ _) arithexp2) = (getIVarArith arithexp2)
+-- getIVarComp (Ge arithexp1 (Read _ _)) = (getIVarArith arithexp1)
+-- getIVarComp (Ge arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarComp (Lt (AWrite _ _ _) (AWrite _ _ _)) = []
+-- getIVarComp (Lt (AWrite _ _ _) arithexp2) = (getIVarArith arithexp2)
+-- getIVarComp (Lt arithexp1 (AWrite _ _ _)) = (getIVarArith arithexp1)
+-- getIVarComp (Lt (Read _ _) (Read _ _)) = []
+-- getIVarComp (Lt (Read _ _) arithexp2) = (getIVarArith arithexp2)
+-- getIVarComp (Lt arithexp1 (Read _ _)) = (getIVarArith arithexp1)
+-- getIVarComp (Lt arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- getIVarComp (Gt (AWrite _ _ _) (AWrite _ _ _)) = []
+-- getIVarComp (Gt (AWrite _ _ _) arithexp2) = (getIVarArith arithexp2)
+-- getIVarComp (Gt arithexp1 (AWrite _ _ _)) = (getIVarArith arithexp1)
+-- getIVarComp (Gt (Read _ _) (Read _ _)) = []
+-- getIVarComp (Gt (Read _ _) arithexp2) = (getIVarArith arithexp2)
+-- getIVarComp (Gt arithexp1 (Read _ _)) = (getIVarArith arithexp1)
+-- getIVarComp (Gt arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- -- getIVarComp (Eq arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- -- getIVarComp (Neq arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- -- getIVarComp (Le arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- -- getIVarComp (Ge arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- -- getIVarComp (Lt arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+-- -- getIVarComp (Gt arithexp1 arithexp2) = (getIVarArith arithexp1) ++ (getIVarArith arithexp2)
+
+-- getIVarNames :: [String] -> [String]
+-- getIVarNames [] = []
+-- getIVarNames (x : xs) = [x] ++ (getIVarNames xs)
+
+-- getIVarAssertion :: Language.Assertion -> [String]
+-- getIVarAssertion (ACmp comp) = getIVarComp comp
+-- getIVarAssertion (ANot assn) = getIVarAssertion assn
+-- getIVarAssertion (ADisj assn1 assn2) = (getIVarAssertion assn1) ++ (getIVarAssertion assn2)
+-- getIVarAssertion (AConj assn1 assn2) = (getIVarAssertion assn1) ++ (getIVarAssertion assn2)
+-- getIVarAssertion (Implies assn1 assn2) = (getIVarAssertion assn1) ++ (getIVarAssertion assn2)
+-- getIVarAssertion (Forall names assn) = getIVarNames names ++ (getIVarAssertion assn)
+-- getIVarAssertion (Exists names assn) = getIVarNames names ++ (getIVarAssertion assn)
+-- getIVarAssertion (AParens assn) = getIVarAssertion assn
