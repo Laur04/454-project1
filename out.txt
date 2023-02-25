@@ -8,5 +8,10 @@
 (declare-fun i () Int)
 (declare-fun n () Int)
 (declare-fun x () Int)
+(declare-fun a () (Array Int Int))
+(declare-fun i () (Array Int Int))
 (assert (not (=> (<= 0 N) (=> (= AAtmp_0 n) (=> (= VCtmp__2 0) (and (forall ((i Int) )(=> (and (<= 0 i) (< i VCtmp__2)) (not (= (select a i) x)))) (and (and (<= 0 VCtmp__2) (<= VCtmp__2 N)) (=> (forall ((i Int) )(=> (and (<= 0 i) (< i VCtmp__1)) (not (= (select a i) x)))) (=> (and (<= 0 VCtmp__1) (<= VCtmp__1 N)) (and (=> (and (< VCtmp__1 N) (not (= (select a VCtmp__1) x))) (=> (= AAtmp_1 VCtmp__1) (=> (= VCtmp__0 (+ AAtmp_1 1)) (=> (= 0 0) (and (forall ((i Int) )(=> (and (<= 0 i) (< i VCtmp__0)) (not (= (select a i) x)))) (and (and (<= 0 VCtmp__0) (<= VCtmp__0 N)) (=> (= 0 1) (=> (= 0 0) (and (or (= (select a VCtmp__0) x) (forall ((i Int) )(=> (and (<= 0 i) (< i N)) (not (= (select a i) x))))) (= 0 0)))))))))) (=> (not (and (< VCtmp__1 N) (not (= (select a VCtmp__1) x)))) (=> (= 0 0) (and (or (= (select a VCtmp__1) x) (forall ((i Int) )(=> (and (<= 0 i) (< i N)) (not (= (select a i) x))))) (= 0 0))))))))))))))
 (check-sat)
+unsat
+
+Verified

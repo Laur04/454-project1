@@ -262,7 +262,7 @@ declareFuns (x:xs) = "(declare-fun " ++ x ++ " () Int)"++ "\n" ++ declareFuns xs
 
 declareArrVars :: [String] -> String 
 declareArrVars [] = []
-declareArrVars (x:xs) = "(declare-fun " ++ x ++ " () (Array Int Int))"++ "\n" ++ declareFuns xs
+declareArrVars (x:xs) = "(declare-fun " ++ x ++ " () (Array Int Int))"++ "\n" ++ declareArrVars xs
 
 -- NOTE: Helper Assertion returns the var names from a big assertion
 
