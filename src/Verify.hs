@@ -5,6 +5,7 @@ import AssumeAssert
 import Parser.Parser
 import Control.Monad.State.Lazy
 import System.Process
+import Data.List
 
 
 data Result = Verified | NotVerified | Unknown String
@@ -15,10 +16,12 @@ verify inputProgram = do
   let parsedProgram = parseProg inputProgram
   let assumeAssertedProgram = driverAA parsedProgram
   let weakestPreProgram = driverWP assumeAssertedProgram
-  putStrLn (show weakestPreProgram ++ "\n")
+  -- putStrLn (show weakestPreProgram ++ "\n")
   let smtString = driverSMTLIB weakestPreProgram 
-  putStrLn (show smtString ++ "\n")
-  out <- readProcess ["z3", "file"] smtString
+  putStrLn(smtString ++ "\n")
+  -- out <- readProcess "z3" [] smtString
+  -- putStrLn ( out ++ "\n")
+
   return Verified
 
 --------------------------------------------
@@ -128,10 +131,13 @@ helperAssertion (Forall names assn) = names ++ (helperAssertion assn)
 helperAssertion (Exists names assn) = names ++ (helperAssertion assn)
 helperAssertion (AParens assn) = helperAssertion assn
 
-rmdups :: [String] -> [String]
-rmdups [] = []
-rmdups (x:xs)   | x `elem` xs   = rmdups xs
-                | otherwise     = x : rmdups xs
+-- rmdups :: [String] -> [String]
+-- rmdups [] = []
+-- rmdups (x:xs)   | x `elem` xs   = rmdups xs
+                -- | otherwise     = x : rmdups xs
+
+rmdups :: (Ord a) => [a] -> [a]
+rmdups = map head . group . sort
 
 whileHelper :: [String]-> AssumeAssert.GCommand
 whileHelper [] = Assume (ACmp (Eq (Num 0) (Num 0)))
@@ -178,7 +184,7 @@ tmpGen2 :: State Int String
 tmpGen2 = do 
   n <- get
   put (n + 1)
-  return (show n ++ "_tmp")
+  return ("tmp__" ++ show n)
 
 toVC :: AssumeAssert.GCommand -> Language.Assertion -> State Int Language.Assertion
 toVC (Assume b) c = do
@@ -229,15 +235,15 @@ freshCompHelper x tmp (Gt arithexp1 arithexp2) = Gt (replace x tmp arithexp1) (r
 -- | BEGIN VC to SMT LIB Conversion 
 --------------------------------------------
 driverSMTLIB :: Language.Assertion -> String
-driverSMTLIB vc = setLogic ++ declareFuns (helperAssertion vc) ++ "(assert" ++ toSMTLIB vc ++ ")\n(check-sat)\n"
+driverSMTLIB vc = setLogic ++ declareFuns (rmdups (helperAssertion vc)) ++ "(assert " ++ toSMTLIB vc ++ ")" ++ "\n" ++"(check-sat)"
   
 setLogic :: String
-setLogic = "(set-logic QF_AUFBV)\n"
+setLogic = "(set-logic QF_LIA)" ++ "\n"
 
 -- this needs work for array names and shit
 declareFuns :: [String] -> String 
 declareFuns [] = []
-declareFuns (x:xs) = "(declare-fun " ++ x ++ " () Int) \n" ++ declareFuns xs
+declareFuns (x:xs) = "(declare-fun " ++ x ++ " () Int)"++ "\n" ++ declareFuns xs
 
 -- NOTE: Helper Assertion returns the var names from a big assertion
 
