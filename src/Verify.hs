@@ -14,13 +14,13 @@ data Result = Verified | NotVerified | Unknown String
 
 verify :: String -> IO Result
 verify inputProgram = do
-  -- putStrLn (show inputProgram ++ "\n") 
+  putStrLn (show inputProgram ++ "\n") 
   let parsedProgram = parseProg inputProgram
-  -- putStrLn (show parsedProgram ++ "\n") 
+  putStrLn (show parsedProgram ++ "\n") 
   let assumeAssertedProgram = driverAA parsedProgram
-  -- putStrLn (show assumeAssertedProgram ++ "\n")
+  putStrLn (show assumeAssertedProgram ++ "\n")
   let weakestPreProgram = driverWP assumeAssertedProgram
-  -- putStrLn (show weakestPreProgram ++ "\n")
+  putStrLn (show weakestPreProgram ++ "\n")
   let smtString = driverSMTLIB weakestPreProgram 
   putStrLn(smtString)
   out <- readProcess "z3" ["-in"] smtString
@@ -92,63 +92,11 @@ getElements [] = []
 getElements (x : xs) = (helperStatement x) ++ getElements xs
 
 helperStatement :: Language.Statement -> [String]
-helperStatement (Assign name arithexp) = [name] ++ helperArith arithexp
-helperStatement (ParAssign name1 name2 arithexp1 arithexp2) = [name1, name2] ++ (helperArith arithexp1) ++ (helperArith arithexp2)
-helperStatement (Write name arithexp1 arithexp2) = [name] ++ (helperArith arithexp1) ++ (helperArith arithexp2)
-helperStatement (If boolexp block1 block2) = (helperBool boolexp) ++ (getElements block1) ++ (getElements block2)
-helperStatement (While boolexp assns block) = (helperBool boolexp) ++ (helperAssertionList assns) ++ (getElements block)
-
-helperArith :: Language.ArithExp -> [String]
-helperArith (Num _) = []
-helperArith (Var name) = [name]
-helperArith (Read name arithexp) = [name] ++ (helperArith arithexp)
-helperArith (AWrite name arithexp1 arithexp2) = [name] ++ (helperArith arithexp1) ++ (helperArith arithexp2)
-helperArith (Add arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
-helperArith (Sub arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
-helperArith (Mul arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
-helperArith (Div arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
-helperArith (Mod arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
-helperArith (Parens arithexp) = helperArith arithexp
-
-helperComp :: Language.Comparison -> [String]
-helperComp (Eq arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
-helperComp (Neq arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
-helperComp (Le arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
-helperComp (Ge arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
-helperComp (Lt arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
-helperComp (Gt arithexp1 arithexp2) = (helperArith arithexp1) ++ (helperArith arithexp2)
-
-helperBool :: Language.BoolExp -> [String]
-helperBool (BCmp comp) = helperComp comp
-helperBool (BNot boolexp) = helperBool boolexp
-helperBool (BDisj boolexp1 boolexp2) = (helperBool boolexp1) ++ (helperBool boolexp2)
-helperBool (BConj boolexp1 boolexp2) = (helperBool boolexp1) ++ (helperBool boolexp2)
-helperBool (BParens boolexp) = helperBool boolexp
-
-helperNames :: [String] -> [String]
-helperNames [] = []
-helperNames (x : xs) = [x] ++ (helperNames xs)
-
-helperAssertionList :: [Language.Assertion] -> [String]
-helperAssertionList [] = []
-helperAssertionList (x : xs) = (helperAssertion x) ++ (helperAssertionList xs)
-
-helperAssertion :: Language.Assertion -> [String]
-helperAssertion (ACmp comp) = helperComp comp
-helperAssertion (ANot assn) = helperAssertion assn
-helperAssertion (ADisj assn1 assn2) = (helperAssertion assn1) ++ (helperAssertion assn2)
-helperAssertion (AConj assn1 assn2) = (helperAssertion assn1) ++ (helperAssertion assn2)
-helperAssertion (Implies assn1 assn2) = (helperAssertion assn1) ++ (helperAssertion assn2)
-helperAssertion (Forall names assn) = helperNames names ++ (helperAssertion assn)
-helperAssertion (Exists names assn) = helperNames names ++ (helperAssertion assn)
-helperAssertion (AParens assn) = helperAssertion assn
-
-
-
--- rmdups :: [String] -> [String]
--- rmdups [] = []
--- rmdups (x:xs)   | x `elem` xs   = rmdups xs
-                -- | otherwise     = x : rmdups xs
+helperStatement (Assign name _) = [name]
+helperStatement (ParAssign name1 name2 _ _) = [name1, name2]
+helperStatement (Write name _ _) = [name]
+helperStatement (If _ block1 block2) = (getElements block1) ++ (getElements block2)
+helperStatement (While _ _ block) = getElements block
 
 rmdups :: (Ord a) => [a] -> [a]
 rmdups = map head . group . sort
