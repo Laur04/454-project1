@@ -1,13 +1,13 @@
-program find
+program positive_mult
   post m * n >= 0
 is
     if m > 0 then
         if n < 0 then
-            n := -n
+            n := -n;
         end
     else 
         if n > 0 then
-            n := -n
+            n := -n;
         end
     end
 end
