@@ -4,10 +4,6 @@ program halfAdder
   post s = (a + b) % 2
   post c = a * b
 is
-  boolSum := a + b;
-  carry := 0;
-  if boolSum > 1 then
-    boolSum := 0;
-    carry := 1;
-  end
+  s := (a + b) % 2;
+  c := a * b;
 end
