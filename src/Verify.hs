@@ -14,19 +14,18 @@ data Result = Verified | NotVerified | Unknown String
 
 verify :: String -> IO Result
 verify inputProgram = do
-  putStrLn (show inputProgram ++ "\n") 
+  -- putStrLn (show inputProgram ++ "\n") 
   let parsedProgram = parseProg inputProgram
-  putStrLn (show parsedProgram ++ "\n") 
+  -- putStrLn (show parsedProgram ++ "\n") 
   let assumeAssertedProgram = driverAA parsedProgram
-  putStrLn (show assumeAssertedProgram ++ "\n")
+  -- putStrLn (show assumeAssertedProgram ++ "\n")
   let weakestPreProgram = driverWP assumeAssertedProgram
-  putStrLn (show weakestPreProgram ++ "\n")
+  -- putStrLn (show weakestPreProgram ++ "\n")
   let smtString = driverSMTLIB weakestPreProgram 
-  putStrLn(smtString)
+  -- putStrLn(smtString)
   out <- readProcess "z3" ["-in"] smtString
-  putStrLn(out) 
+  -- putStrLn(out) 
   return (toReturn (head (lines out)))
-  -- return Verified
 
 toReturn :: String -> Result
 toReturn "unsat" = Verified
@@ -177,8 +176,7 @@ fresh x tmp (AParens c) = AParens (fresh x tmp c)
 
 freshNameHelper :: String -> String -> [String] -> [String]
 freshNameHelper _ _ [] = []
-freshNameHelper var tmp [x] = if x == var then [tmp] else [x]
-freshNameHelper var tmp (x : xs) = if x == var then [tmp] ++ (freshNameHelper var tmp xs) else [var] ++ (freshNameHelper var tmp xs)
+freshNameHelper var tmp (x : xs) = if x == var then ([tmp] ++ (freshNameHelper var tmp xs)) else ([x] ++ (freshNameHelper var tmp xs))
 
 freshCompHelper :: String -> String -> Language.Comparison -> Language.Comparison
 freshCompHelper x tmp (Eq arithexp1 arithexp2) = Eq (replace x tmp arithexp1) (replace x tmp arithexp2)
